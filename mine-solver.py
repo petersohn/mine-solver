@@ -101,8 +101,9 @@ class Solver:
                     mines += 1
         return value - mines, unknown
 
-    def grind(self) -> bool:
+    def grind(self) -> Optional[List[Point]]:
         changed = False
+        problematic: List[Point] = []
         for i in range(len(self.known)):
             if self.known[i] < 0:
                 continue
@@ -110,7 +111,6 @@ class Solver:
             neighbors = self.neighbors(p)
             assert neighbors is not None
             mines, unknown = neighbors
-            # print('({}, {}): mines={}, unknown={}'.format(p.x, p.y, mines, len(unknown)))
             if not unknown:
                 continue
             if mines == 0:
@@ -121,7 +121,11 @@ class Solver:
                 for pp in unknown:
                     self.set(pp, -1)
                 changed = True
-        return changed
+            elif not changed:
+                problematic.append(p)
+        if changed:
+            return None
+        return problematic
 
     def solve(self, start: Point) -> None:
         self.size = self.table.get_size()
@@ -129,12 +133,17 @@ class Solver:
         self.set(start, self.attempt(start))
 
         while True:
-            while self.grind():
-                pass
+            while True:
+                problematic = self.grind()
+                if problematic is not None:
+                    break
             self.print()
-            if not any(v == -2 for v in self.known):
+            if not problematic:
                 break
             raise Exception('Cannot solve')
+            self.print()
+            print('-----')
+        assert not any(v == -2 for v in self.known)
 
 
 def load_table(filename: str) -> Table:
