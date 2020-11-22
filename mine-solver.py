@@ -174,6 +174,9 @@ class Solver:
         while changed:
             changed = False
 
+            if self.remaining_mines < len(mines):
+                return False
+
             for p in problematic:
                 if p.x < minp.x - 1 or p.x > maxp.x + 1 \
                         or p.y < minp.y - 1 or p.y > maxp.y + 1 \
