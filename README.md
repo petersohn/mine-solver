@@ -60,7 +60,7 @@ free neighbors than remaining mines.
 
 ### Eliminate
 
-```pthon
+```python
 eliminate(problematic)
 ```
 
@@ -90,6 +90,9 @@ The cell `{2, 2}` is mine in all consistent substitutions, so it will be marked
 as mine.
 
 ### Consistency check
+
+Check the possible implications of a substitution without marking or attempting
+any cells. Return whether the substitution is consistent or not.
 
 Maintain the following sets:
 
