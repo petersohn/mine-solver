@@ -172,15 +172,12 @@ class Solver:
                 unknown_set = set(unknown)
                 current_not_mines = unknown_set & not_mines
                 current_mines = unknown_set & mines
-                print('  {}: u{} +{} -{}'.format(
-                    p, unknown, current_mines, current_not_mines))
                 if num_mines < len(current_mines) or \
                         num_mines > len(unknown) - len(current_not_mines):
                     return False
                 if num_mines == len(current_mines):
                     processed.add(p)
                     new_not_mines = unknown_set - current_mines
-                    print('   -{}'.format(new_not_mines))
                     before = len(not_mines)
                     not_mines |= new_not_mines
                     if len(not_mines) != before:
@@ -191,7 +188,6 @@ class Solver:
                 if num_mines == len(unknown) - len(current_not_mines):
                     processed.add(p)
                     new_mines = unknown_set - current_not_mines
-                    print('   +{}'.format(new_mines))
                     before = len(mines)
                     mines |= new_mines
                     if len(mines) != before:
@@ -199,19 +195,15 @@ class Solver:
                         for pp in new_mines:
                             minp = Point(min(minp.x, pp.x), min(minp.y, pp.y))
                             maxp = Point(max(maxp.x, pp.x), max(maxp.y, pp.y))
-            print('  --')
 
         return True
 
     def eliminate(self, problematic: List[Point]) -> bool:
         for p in problematic:
-            print(p)
             num_mines, unknown = self.neighbors(p)
             resolution = {pp: [False, False] for pp in unknown}
             for possibility in self.find_possibilities(unknown, num_mines):
-                print(' {}'.format(possibility))
                 if not self.is_consistent(problematic, possibility):
-                    print('not consistent')
                     continue
                 for pp in unknown:
                     resolution[pp][int(pp in possibility)] = True
