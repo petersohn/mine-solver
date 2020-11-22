@@ -15,6 +15,9 @@ class Table:
     def get_size(self) -> Point:
         raise NotImplementedError
 
+    def total_mines(self) -> int:
+        raise NotImplementedError
+
 
 def check_size(p: Point, size: Point) -> None:
     assert p.x >= 0
@@ -47,12 +50,16 @@ class SimpleTable(Table):
                     num += 1
         return num
 
+    def total_mines(self) -> int:
+        return len(self.mines)
+
 
 class Solver:
     def __init__(self, table: Table):
         self.table = table
         self.known: List[int] = []
         self.size = Point(0, 0)
+        self.remaining_mines = 0
 
     def at(self, p: Point) -> Optional[int]:
         if p.x < 0 or p.x >= self.size.x or p.y < 0 or p.y >= self.size.y:
@@ -60,7 +67,10 @@ class Solver:
         return self.known[p.y * self.size.x + p.x]
 
     def set(self, p: Point, value: int) -> None:
-        self.known[p.y * self.size.x + p.x] = value
+        index = p.y * self.size.x + p.x
+        if self.known[index] != -1 and value == -1:
+            self.remaining_mines -= 1
+        self.known[index] = value
 
     def print(self) -> None:
         def symbol(x: int, y: int) -> str:
@@ -163,6 +173,7 @@ class Solver:
         changed = True
         while changed:
             changed = False
+
             for p in problematic:
                 if p.x < minp.x - 1 or p.x > maxp.x + 1 \
                         or p.y < minp.y - 1 or p.y > maxp.y + 1 \
@@ -225,6 +236,7 @@ class Solver:
 
     def solve(self, start: Point) -> None:
         self.size = self.table.get_size()
+        self.remaining_mines = self.table.total_mines()
         self.known = [-2 for i in range(self.size.x * self.size.y)]
         self.set(start, self.attempt(start))
 
@@ -238,6 +250,7 @@ class Solver:
             self.print()
             print('-----')
         assert not any(v == -2 for v in self.known)
+        assert self.remaining_mines == 0
 
 
 def load_table(filename: str) -> Table:
