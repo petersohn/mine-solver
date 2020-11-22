@@ -101,7 +101,7 @@ class Solver:
                     mines += 1
         return value - mines, unknown
 
-    def grind(self) -> Optional[List[Point]]:
+    def grind_step(self) -> Optional[List[Point]]:
         changed = False
         problematic: List[Point] = []
         for i in range(len(self.known)):
@@ -127,16 +127,19 @@ class Solver:
             return None
         return problematic
 
+    def grind(self) -> List[Point]:
+        problematic = None
+        while problematic is None:
+            problematic = self.grind_step()
+        return problematic
+
     def solve(self, start: Point) -> None:
         self.size = self.table.get_size()
         self.known = [-2 for i in range(self.size.x * self.size.y)]
         self.set(start, self.attempt(start))
 
         while True:
-            while True:
-                problematic = self.grind()
-                if problematic is not None:
-                    break
+            problematic = self.grind()
             self.print()
             if not problematic:
                 break
