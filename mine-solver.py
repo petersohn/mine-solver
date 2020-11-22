@@ -130,7 +130,6 @@ class Solver:
 
         while True:
             while self.grind():
-                self.print()
                 pass
             self.print()
             if not any(v == -2 for v in self.known):
