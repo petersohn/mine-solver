@@ -1,4 +1,5 @@
-from typing import Iterable, List, NamedTuple, Optional, Tuple
+from typing import Iterable, Iterator, List, NamedTuple, Optional, \
+    Set, Tuple
 import argparse
 
 
@@ -86,7 +87,7 @@ class Solver:
         return result
 
     def neighbors(self, p: Point) -> Tuple[int, List[Point]]:
-        mines = 0
+        num_mines = 0
         unknown: List[Point] = []
         value = self.at(p)
         assert value is not None
@@ -98,8 +99,8 @@ class Solver:
                 if neighbor == -2:
                     unknown.append(pp)
                 elif neighbor == -1:
-                    mines += 1
-        return value - mines, unknown
+                    num_mines += 1
+        return value - num_mines, unknown
 
     def grind_step(self) -> Optional[List[Point]]:
         changed = False
@@ -108,14 +109,14 @@ class Solver:
             if self.known[i] < 0:
                 continue
             p = Point(i % self.size.x, i // self.size.x)
-            mines, unknown = self.neighbors(p)
+            num_mines, unknown = self.neighbors(p)
             if not unknown:
                 continue
-            if mines == 0:
+            if num_mines == 0:
                 for pp in unknown:
                     self.set(pp, self.attempt(pp))
                 changed = True
-            elif mines == len(unknown):
+            elif num_mines == len(unknown):
                 for pp in unknown:
                     self.set(pp, -1)
                 changed = True
@@ -131,6 +132,105 @@ class Solver:
             problematic = self.grind_step()
         return problematic
 
+    def find_possibilities_inner(
+            self, points: List[Point],
+            num: int, result: Set[Point]) -> Iterator[Set[Point]]:
+        if num == 0:
+            yield result
+            return
+        if num > len(points):
+            return
+        remaining = points[1:]
+        yield from self.find_possibilities_inner(remaining, num, result)
+        yield from self.find_possibilities_inner(
+            remaining, num - 1, result | set([points[0]]))
+
+    def find_possibilities(
+            self, points: List[Point], num: int) -> Iterator[Set[Point]]:
+        return self.find_possibilities_inner(points, num, set())
+
+    def is_consistent(
+            self, problematic: List[Point], mines: Set[Point]) -> bool:
+        not_mines: Set[Point] = set()
+        processed: Set[Point] = set()
+        minp = Point(
+            min(p.x for p in mines),
+            min(p.y for p in mines))
+        maxp = Point(
+            max(p.x for p in mines),
+            max(p.y for p in mines))
+
+        changed = True
+        while changed:
+            changed = False
+            for p in problematic:
+                if p.x < minp.x - 1 or p.x > maxp.x + 1 \
+                        or p.y < minp.y - 1 or p.y > maxp.y + 1 \
+                        or p in processed:
+                    continue
+                num_mines, unknown = self.neighbors(p)
+                unknown_set = set(unknown)
+                current_not_mines = unknown_set & not_mines
+                current_mines = unknown_set & mines
+                print('  {}: u{} +{} -{}'.format(
+                    p, unknown, current_mines, current_not_mines))
+                if num_mines < len(current_mines) or \
+                        num_mines > len(unknown) - len(current_not_mines):
+                    return False
+                if num_mines == len(current_mines):
+                    processed.add(p)
+                    new_not_mines = unknown_set - current_mines
+                    print('   -{}'.format(new_not_mines))
+                    before = len(not_mines)
+                    not_mines |= new_not_mines
+                    if len(not_mines) != before:
+                        changed = True
+                        for pp in new_not_mines:
+                            minp = Point(min(minp.x, pp.x), min(minp.y, pp.y))
+                            maxp = Point(max(maxp.x, pp.x), max(maxp.y, pp.y))
+                if num_mines == len(unknown) - len(current_not_mines):
+                    processed.add(p)
+                    new_mines = unknown_set - current_not_mines
+                    print('   +{}'.format(new_mines))
+                    before = len(mines)
+                    mines |= new_mines
+                    if len(mines) != before:
+                        changed = True
+                        for pp in new_mines:
+                            minp = Point(min(minp.x, pp.x), min(minp.y, pp.y))
+                            maxp = Point(max(maxp.x, pp.x), max(maxp.y, pp.y))
+            print('  --')
+
+        return True
+
+    def eliminate(self, problematic: List[Point]) -> bool:
+        for p in problematic:
+            print(p)
+            num_mines, unknown = self.neighbors(p)
+            resolution = {pp: [False, False] for pp in unknown}
+            for possibility in self.find_possibilities(unknown, num_mines):
+                print(' {}'.format(possibility))
+                if not self.is_consistent(problematic, possibility):
+                    print('not consistent')
+                    continue
+                for pp in unknown:
+                    resolution[pp][int(pp in possibility)] = True
+            changed = False
+            for pp, (no, yes) in resolution.items():
+                if no and yes:
+                    continue
+                if no:
+                    self.set(pp, self.attempt(pp))
+                elif yes:
+                    self.set(pp, -1)
+                else:
+                    self.print()
+                    raise Exception('Something is inconsistent')
+                changed = True
+            if changed:
+                return True
+        return False
+
     def solve(self, start: Point) -> None:
         self.size = self.table.get_size()
         self.known = [-2 for i in range(self.size.x * self.size.y)]
@@ -141,7 +241,8 @@ class Solver:
             self.print()
             if not problematic:
                 break
-            raise Exception('Cannot solve')
+            if not self.eliminate(problematic):
+                raise Exception('Cannot solve')
             self.print()
             print('-----')
         assert not any(v == -2 for v in self.known)
