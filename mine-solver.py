@@ -85,12 +85,12 @@ class Solver:
             raise Exception('Stepped on mine')
         return result
 
-    def neighbors(self, p: Point) -> Optional[Tuple[int, List[Point]]]:
+    def neighbors(self, p: Point) -> Tuple[int, List[Point]]:
         mines = 0
         unknown: List[Point] = []
         value = self.at(p)
-        if value is None or value < 0:
-            return None
+        assert value is not None
+        assert value >= 0
         for y in range(p.y - 1, p.y + 2):
             for x in range(p.x - 1, p.x + 2):
                 pp = Point(x, y)
@@ -108,9 +108,7 @@ class Solver:
             if self.known[i] < 0:
                 continue
             p = Point(i % self.size.x, i // self.size.x)
-            neighbors = self.neighbors(p)
-            assert neighbors is not None
-            mines, unknown = neighbors
+            mines, unknown = self.neighbors(p)
             if not unknown:
                 continue
             if mines == 0:
