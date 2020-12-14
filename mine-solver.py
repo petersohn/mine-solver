@@ -1,6 +1,8 @@
-from typing import Iterable, Iterator, List, NamedTuple, Optional, \
+from typing import Any, Iterable, Iterator, List, NamedTuple, Optional, \
     Set, Tuple
 import argparse
+import sys
+import traceback
 
 
 class Point(NamedTuple):
@@ -54,12 +56,42 @@ class SimpleTable(Table):
         return len(self.mines)
 
 
+class InteractiveTable(Table):
+    def __init__(self, size: Point, mines: int):
+        self.size = size
+        self.mines = mines
+
+    def get_size(self) -> Point:
+        return self.size
+
+    def attempt(self, p: Point) -> int:
+        while True:
+            try:
+                sys.stdout.write('[0-8|m] ? ')
+                sys.stdout.flush()
+                line = sys.stdin.readline()
+                if line == 'm':
+                    return -1
+                value = int(line)
+                assert value >= 0
+                assert value <= 8
+                return value
+            except KeyboardInterrupt:
+                raise
+            except Exception:
+                traceback.print_exc()
+
+    def total_mines(self) -> int:
+        return self.mines
+
+
 class Solver:
-    def __init__(self, table: Table):
+    def __init__(self, table: Table, interactive: bool):
         self.table = table
         self.known: List[int] = []
         self.size = Point(0, 0)
         self.remaining_mines = 0
+        self.interactive = interactive
 
     def at(self, p: Point) -> Optional[int]:
         if p.x < 0 or p.x >= self.size.x or p.y < 0 or p.y >= self.size.y:
@@ -75,12 +107,16 @@ class Solver:
     def print(self) -> None:
         def symbol(x: int, y: int) -> str:
             n = self.at(Point(x, y))
+            if n == -4:
+                return '?'
             if n == -3:
                 return '!'
             if n == -2:
                 return ','
             if n == -1:
                 return 'X'
+            if n == 0:
+                return '.'
             return str(n)
 
         print('\n'.join(
@@ -88,13 +124,16 @@ class Solver:
             for y in range(self.size.y)))
         print()
 
-    def attempt(self, p: Point) -> int:
+    def attempt(self, p: Point) -> None:
+        if self.interactive:
+            self.set(p, -4)
+            self.print()
         result = self.table.attempt(p)
         if result == -1:
             self.set(p, -3)
             self.print()
             raise Exception('Stepped on mine')
-        return result
+        self.set(p, result)
 
     def neighbors(self, p: Point) -> Tuple[int, List[Point]]:
         num_mines = 0
@@ -124,7 +163,7 @@ class Solver:
                 continue
             if num_mines == 0:
                 for pp in unknown:
-                    self.set(pp, self.attempt(pp))
+                    self.attempt(pp)
                 changed = True
             elif num_mines == len(unknown):
                 for pp in unknown:
@@ -226,7 +265,7 @@ class Solver:
                 if no and yes:
                     continue
                 if no:
-                    self.set(pp, self.attempt(pp))
+                    self.attempt(pp)
                 elif yes:
                     self.set(pp, -1)
                 else:
@@ -241,17 +280,19 @@ class Solver:
         self.size = self.table.get_size()
         self.remaining_mines = self.table.total_mines()
         self.known = [-2 for i in range(self.size.x * self.size.y)]
-        self.set(start, self.attempt(start))
+        self.attempt(start)
 
         while True:
             problematic = self.grind()
-            self.print()
+            if not self.interactive:
+                self.print()
             if not problematic:
                 break
             if not self.eliminate(problematic):
                 raise Exception('Cannot solve')
-            self.print()
-            print('-----')
+            if not self.interactive:
+                self.print()
+                print('-----')
         assert not any(v == -2 for v in self.known)
         assert self.remaining_mines == 0
 
@@ -274,12 +315,33 @@ def load_table(filename: str) -> Table:
     return SimpleTable(Point(width, y), mines)
 
 
+def get_file_solver(args: 'Any') -> Solver:
+    table = load_table(args.file)
+    return Solver(table, interactive=False)
+
+
+def get_interactive_solver(args: 'Any') -> Solver:
+    return Solver(
+        InteractiveTable(Point(args.width, args.height), args.mines),
+        interactive=True)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-f', '--file', required=True)
     parser.add_argument('-x', '--startx', type=int, required=True)
     parser.add_argument('-y', '--starty', type=int, required=True)
+    subparsers = parser.add_subparsers()
+
+    file_parser = subparsers.add_parser('file', aliases=['f'])
+    file_parser.add_argument('file')
+    file_parser.set_defaults(func=get_file_solver)
+
+    interactive_parser = subparsers.add_parser('interactive', aliases=['i'])
+    interactive_parser.add_argument('-w', '--width', type=int, required=True)
+    interactive_parser.add_argument('-hg', '--height', type=int, required=True)
+    interactive_parser.add_argument('-m', '--mines', type=int, required=True)
+    interactive_parser.set_defaults(func=get_interactive_solver)
+
     args = parser.parse_args()
-    table = load_table(args.file)
-    solver = Solver(table)
+    solver = args.func(args)
     solver.solve(Point(args.startx, args.starty))
