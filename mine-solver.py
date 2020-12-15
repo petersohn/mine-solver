@@ -93,16 +93,21 @@ class Solver:
         self.remaining_mines = 0
         self.interactive = interactive
 
+    def index_to_point(self, index: int) -> Point:
+        return Point(index % self.size.x, index // self.size.x)
+
     def at(self, p: Point) -> Optional[int]:
         if p.x < 0 or p.x >= self.size.x or p.y < 0 or p.y >= self.size.y:
             return None
         return self.known[p.y * self.size.x + p.x]
 
-    def set(self, p: Point, value: int) -> None:
-        index = p.y * self.size.x + p.x
+    def set_index(self, index: int, value: int) -> None:
         if self.known[index] != -1 and value == -1:
             self.remaining_mines -= 1
         self.known[index] = value
+
+    def set(self, p: Point, value: int) -> None:
+        self.set_index(p.y * self.size.x + p.x, value)
 
     def print(self) -> None:
         def symbol(x: int, y: int) -> str:
@@ -157,7 +162,7 @@ class Solver:
         for i in range(len(self.known)):
             if self.known[i] < 0:
                 continue
-            p = Point(i % self.size.x, i // self.size.x)
+            p = self.index_to_point(i)
             num_mines, unknown = self.neighbors(p)
             if not unknown:
                 continue
@@ -293,8 +298,23 @@ class Solver:
             if not self.interactive:
                 self.print()
                 print('-----')
-        assert not any(v == -2 for v in self.known)
-        assert self.remaining_mines == 0
+
+        num_unsolved = sum(v == -2 for v in self.known)
+        if num_unsolved == self.remaining_mines:
+            for i in range(len(self.known)):
+                if self.known[i] == -2:
+                    self.set_index(i, -1)
+        elif self.remaining_mines == 0:
+            for i in range(len(self.known)):
+                if self.known[i] == -2:
+                    self.attempt(self.index_to_point(i))
+        else:
+            raise Exception('Field has unreachable part')
+
+        print()
+        print('-' * self.size.x * 2)
+        self.print()
+        print('-' * self.size.x * 2)
 
 
 def load_table(filename: str) -> Table:
