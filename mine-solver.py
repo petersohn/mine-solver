@@ -86,12 +86,13 @@ class InteractiveTable(Table):
 
 
 class Solver:
-    def __init__(self, table: Table, interactive: bool):
+    def __init__(self, table: Table, interactive: bool, can_guess: bool):
         self.table = table
         self.known: List[int] = []
         self.size = Point(0, 0)
         self.remaining_mines = 0
         self.interactive = interactive
+        self.can_guess = can_guess
 
     def index_to_point(self, index: int) -> Point:
         return Point(index % self.size.x, index // self.size.x)
@@ -281,6 +282,32 @@ class Solver:
                 return True
         return False
 
+    def split_inner(
+            self, partitions: List[Tuple[List[Point], Set[Point]]]) -> bool:
+        for i in range(len(partitions) - 1):
+            for j in range(i + 1, len(partitions)):
+                if not partitions[i][1] & partitions[j][1]:
+                    continue
+
+                partitions[i] = (
+                    partitions[i][0] + partitions[j][0],
+                    partitions[i][1] | partitions[j][1])
+                del partitions[j]
+                return True
+
+        return False
+
+    def split_to_partitions(
+            self, problematic: List[Point]) -> List[List[Point]]:
+        partitions: List[Tuple[List[Point], Set[Point]]] = [
+            ([p], set([p] + self.neighbors(p)[1])) for p in problematic]
+        while self.split_inner(partitions):
+            pass
+        return [part[0] for part in partitions]
+
+    def guess(self, problematic: List[Point]) -> None:
+        raise Exception('NYI')
+
     def solve(self, start: Point) -> None:
         self.size = self.table.get_size()
         self.remaining_mines = self.table.total_mines()
@@ -294,7 +321,10 @@ class Solver:
             if not problematic:
                 break
             if not self.eliminate(problematic):
-                raise Exception('Cannot solve')
+                if self.can_guess:
+                    self.guess(problematic)
+                else:
+                    raise Exception('Cannot solve')
             if not self.interactive:
                 self.print()
                 print('-----')
@@ -337,19 +367,20 @@ def load_table(filename: str) -> Table:
 
 def get_file_solver(args: 'Any') -> Solver:
     table = load_table(args.file)
-    return Solver(table, interactive=False)
+    return Solver(table, interactive=False, can_guess=args.guess)
 
 
 def get_interactive_solver(args: 'Any') -> Solver:
     return Solver(
         InteractiveTable(Point(args.width, args.height), args.mines),
-        interactive=True)
+        interactive=True, can_guess=args.guess)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-x', '--startx', type=int, required=True)
     parser.add_argument('-y', '--starty', type=int, required=True)
+    parser.add_argument('--guess', action='store_true')
     subparsers = parser.add_subparsers()
 
     file_parser = subparsers.add_parser('file', aliases=['f'])
