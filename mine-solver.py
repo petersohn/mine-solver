@@ -91,6 +91,13 @@ class InteractiveTable(Table):
         return self.mines
 
 
+class Values:
+    Mine = -1
+    Unknown = -2
+    SteppedOn = -3
+    Attempt = -4
+
+
 class Solver:
     def __init__(self, table: Table, interactive: bool, can_guess: bool):
         self.table = table
@@ -122,11 +129,11 @@ class Solver:
     def print(self) -> None:
         def symbol(x: int, y: int) -> str:
             n = self.at(Point(x, y))
-            if n == -4:
+            if n == Values.Attempt:
                 return '?'
-            if n == -3:
+            if n == Values.SteppedOn:
                 return '!'
-            if n == -2:
+            if n == Values.Unknown:
                 return ','
             if n == -1:
                 return 'X'
@@ -141,11 +148,11 @@ class Solver:
 
     def attempt(self, p: Point) -> None:
         if self.interactive:
-            self.set(p, -4)
+            self.set(p, Values.Attempt)
             self.print()
         result = self.table.attempt(p)
         if result == -1:
-            self.set(p, -3)
+            self.set(p, Values.SteppedOn)
             raise CannotSolve('Stepped on mine')
         self.set(p, result)
 
@@ -159,7 +166,7 @@ class Solver:
             for x in range(p.x - 1, p.x + 2):
                 pp = Point(x, y)
                 neighbor = self.at(pp)
-                if neighbor == -2:
+                if neighbor == Values.Unknown:
                     unknown.append(pp)
                 elif neighbor == -1:
                     num_mines += 1
@@ -361,7 +368,7 @@ class Solver:
     def solve(self, start: Point) -> None:
         self.size = self.table.get_size()
         self.remaining_mines = self.table.total_mines()
-        self.known = [-2 for i in range(self.size.x * self.size.y)]
+        self.known = [Values.Unknown for i in range(self.size.x * self.size.y)]
         self.attempt(start)
 
         while True:
@@ -387,14 +394,14 @@ class Solver:
                 self.print()
                 print('-----')
 
-        num_unsolved = sum(v == -2 for v in self.known)
+        num_unsolved = sum(v == Values.Unknown for v in self.known)
         if num_unsolved == self.remaining_mines:
             for i in range(len(self.known)):
-                if self.known[i] == -2:
+                if self.known[i] == Values.Unknown:
                     self.set_index(i, -1)
         elif self.remaining_mines == 0:
             for i in range(len(self.known)):
-                if self.known[i] == -2:
+                if self.known[i] == Values.Unknown:
                     self.attempt(self.index_to_point(i))
         else:
             raise CannotSolve('Field has unreachable part')
