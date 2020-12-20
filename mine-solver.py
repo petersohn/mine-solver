@@ -100,6 +100,7 @@ class Solver:
         self.can_guess = can_guess
         self.grind_time = 0.0
         self.eliminate_time = 0.0
+        self.guess_time = 0.0
 
     def index_to_point(self, index: int) -> Point:
         return Point(index % self.size.x, index // self.size.x)
@@ -345,7 +346,9 @@ class Solver:
             self.eliminate_time += time.process_time() - start_time
             if not changed:
                 if self.can_guess:
+                    start_time = time.process_time()
                     self.guess(problematic)
+                    self.guess_time += time.process_time() - start_time
                 else:
                     raise CannotSolve('Cannot solve')
             if not self.interactive:
@@ -436,5 +439,5 @@ if __name__ == '__main__':
         print(e.args[0])
         sys.exit(2)
     finally:
-        print('Grind={:.3f}, Eliminate={:.3f}'.format(
-            solver.grind_time, solver.eliminate_time))
+        print('Grind={:.3f}, Eliminate={:.3f}, Guess={:.3f}'.format(
+            solver.grind_time, solver.eliminate_time, solver.guess_time))
