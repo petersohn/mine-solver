@@ -359,11 +359,12 @@ class Solver:
                 for p in possibility:
                     values[p] += 1
             for p, value in values.items():
-                probabilities[p] = value / len(probabilities)
+                probabilities[p] = value / len(possibilities)
 
         blank_probability = (self.remaining_mines - avg_mines) / sum(
-            self.table[i] == -2 and self.index_to_point(i) in all_neigbors
-            for i in range(len(self.table)))
+            self.known[i] == Values.Unknown
+            and self.index_to_point(i) not in all_neigbors
+            for i in range(len(self.known)))
 
     def solve(self, start: Point) -> None:
         self.size = self.table.get_size()
