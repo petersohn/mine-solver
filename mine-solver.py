@@ -3,6 +3,7 @@ from typing import Any, Iterable, Iterator, List, NamedTuple, Optional, \
 import argparse
 import sys
 import traceback
+import time
 
 
 class Point(NamedTuple):
@@ -97,6 +98,8 @@ class Solver:
         self.remaining_mines = 0
         self.interactive = interactive
         self.can_guess = can_guess
+        self.grind_time = 0.0
+        self.eliminate_time = 0.0
 
     def index_to_point(self, index: int) -> Point:
         return Point(index % self.size.x, index // self.size.x)
@@ -329,12 +332,18 @@ class Solver:
         self.attempt(start)
 
         while True:
+            start_time = time.process_time()
             problematic = self.grind()
+            self.grind_time += time.process_time() - start_time
             if not self.interactive:
                 self.print()
             if not problematic:
                 break
-            if not self.eliminate(problematic):
+
+            start_time = time.process_time()
+            changed = self.eliminate(problematic)
+            self.eliminate_time += time.process_time() - start_time
+            if not changed:
                 if self.can_guess:
                     self.guess(problematic)
                 else:
@@ -426,3 +435,6 @@ if __name__ == '__main__':
         solver.print()
         print(e.args[0])
         sys.exit(2)
+    finally:
+        print('Grind={:.3f}, Eliminate={:.3f}'.format(
+            solver.grind_time, solver.eliminate_time))
