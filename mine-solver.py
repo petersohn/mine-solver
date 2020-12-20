@@ -10,6 +10,10 @@ class Point(NamedTuple):
     y: int
 
 
+class CannotSolve(Exception):
+    pass
+
+
 class Table:
     def attempt(self, p: Point) -> int:
         raise NotImplementedError
@@ -137,8 +141,7 @@ class Solver:
         result = self.table.attempt(p)
         if result == -1:
             self.set(p, -3)
-            self.print()
-            raise Exception('Stepped on mine')
+            raise CannotSolve('Stepped on mine')
         self.set(p, result)
 
     def neighbors(self, p: Point) -> Tuple[int, List[Point]]:
@@ -188,25 +191,38 @@ class Solver:
         return problematic
 
     def find_possibilities_inner(
-            self, points: List[Point],
-            num: int, result: Set[Point]) -> Iterator[Set[Point]]:
+            self, problematic: List[Point], points: List[Point], num: int,
+            result: List[Point], mines: Set[Point],
+            not_mines: Set[Point]) -> Iterator[List[Point]]:
+        if num > len(points):
+            return
+        if mines and not self.is_consistent(problematic, mines, not_mines):
+            return
         if num == 0:
             yield result
             return
-        if num > len(points):
-            return
+
+        p = points[0]
         remaining = points[1:]
-        yield from self.find_possibilities_inner(remaining, num, result)
-        yield from self.find_possibilities_inner(
-            remaining, num - 1, result | set([points[0]]))
+        if p not in mines:
+            yield from self.find_possibilities_inner(
+                problematic, remaining, num, result,
+                set(mines), set(not_mines))
+
+        if p not in not_mines:
+            yield from self.find_possibilities_inner(
+                problematic, remaining, num - 1, result + [p],
+                mines | set([p]), not_mines)
 
     def find_possibilities(
-            self, points: List[Point], num: int) -> Iterator[Set[Point]]:
-        return self.find_possibilities_inner(points, num, set())
+            self, problematic: List[Point], points: List[Point],
+            num: int) -> Iterator[List[Point]]:
+        return self.find_possibilities_inner(problematic, points, num,
+            [], set(), set())
 
     def is_consistent(
-            self, problematic: List[Point], mines: Set[Point]) -> bool:
-        not_mines: Set[Point] = set()
+            self, problematic: List[Point], mines: Set[Point],
+            not_mines: Set[Point]) -> bool:
         processed: Set[Point] = set()
         minp = Point(
             min(p.x for p in mines),
@@ -261,9 +277,7 @@ class Solver:
         for p in problematic:
             num_mines, unknown = self.neighbors(p)
             resolution = {pp: [False, False] for pp in unknown}
-            for possibility in self.find_possibilities(unknown, num_mines):
-                if not self.is_consistent(problematic, possibility):
-                    continue
+            for possibility in self.find_possibilities(problematic, unknown, num_mines):
                 for pp in unknown:
                     resolution[pp][int(pp in possibility)] = True
             changed = False
@@ -276,7 +290,7 @@ class Solver:
                     self.set(pp, -1)
                 else:
                     self.print()
-                    raise Exception('Something is inconsistent')
+                    raise RuntimeError('Something is inconsistent')
                 changed = True
             if changed:
                 return True
@@ -324,7 +338,7 @@ class Solver:
                 if self.can_guess:
                     self.guess(problematic)
                 else:
-                    raise Exception('Cannot solve')
+                    raise CannotSolve('Cannot solve')
             if not self.interactive:
                 self.print()
                 print('-----')
@@ -339,7 +353,7 @@ class Solver:
                 if self.known[i] == -2:
                     self.attempt(self.index_to_point(i))
         else:
-            raise Exception('Field has unreachable part')
+            raise CannotSolve('Field has unreachable part')
 
         print()
         print('-' * self.size.x * 2)
@@ -360,14 +374,21 @@ def load_table(filename: str) -> Table:
                 elif c != 'o':
                     continue
                 x += 1
-            width = max(width, x)
-            y += 1
+            if x != 0:
+                width = max(width, x)
+                y += 1
     return SimpleTable(Point(width, y), mines)
 
 
 def get_file_solver(args: 'Any') -> Solver:
     table = load_table(args.file)
-    return Solver(table, interactive=False, can_guess=args.guess)
+    solver = Solver(table, interactive=False, can_guess=args.guess)
+    if args.startx is None and args.starty is None:
+        with open(args.file) as f:
+            poss = f.readline().split(' ')
+            args.startx = int(poss[0])
+            args.starty = int(poss[1])
+    return solver
 
 
 def get_interactive_solver(args: 'Any') -> Solver:
@@ -378,8 +399,8 @@ def get_interactive_solver(args: 'Any') -> Solver:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-x', '--startx', type=int, required=True)
-    parser.add_argument('-y', '--starty', type=int, required=True)
+    parser.add_argument('-x', '--startx', type=int)
+    parser.add_argument('-y', '--starty', type=int)
     parser.add_argument('--guess', action='store_true')
     subparsers = parser.add_subparsers()
 
@@ -395,4 +416,13 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     solver = args.func(args)
-    solver.solve(Point(args.startx, args.starty))
+
+    if args.startx is None or args.starty is None:
+        raise RuntimeError('Starting position is not given')
+
+    try:
+        solver.solve(Point(args.startx, args.starty))
+    except CannotSolve as e:
+        solver.print()
+        print(e.args[0])
+        sys.exit(2)

@@ -1,3 +1,4 @@
+4 7
 o o x o o o x x o
 o o o o x x o o o
 x o o o o o o o o
