@@ -10,6 +10,10 @@ class Point(NamedTuple):
     y: int
 
 
+class CannotSolve(Exception):
+    pass
+
+
 class Table:
     def attempt(self, p: Point) -> int:
         raise NotImplementedError
@@ -136,8 +140,7 @@ class Solver:
         result = self.table.attempt(p)
         if result == -1:
             self.set(p, -3)
-            self.print()
-            raise Exception('Stepped on mine')
+            raise CannotSolve('Stepped on mine')
         self.set(p, result)
 
     def neighbors(self, p: Point) -> Tuple[int, List[Point]]:
@@ -275,7 +278,7 @@ class Solver:
                     self.set(pp, -1)
                 else:
                     self.print()
-                    raise Exception('Something is inconsistent')
+                    raise RuntimeError('Something is inconsistent')
                 changed = True
             if changed:
                 return True
@@ -294,7 +297,7 @@ class Solver:
             if not problematic:
                 break
             if not self.eliminate(problematic):
-                raise Exception('Cannot solve')
+                raise CannotSolve('Cannot solve')
             if not self.interactive:
                 self.print()
                 print('-----')
@@ -309,7 +312,7 @@ class Solver:
                 if self.known[i] == -2:
                     self.attempt(self.index_to_point(i))
         else:
-            raise Exception('Field has unreachable part')
+            raise CannotSolve('Field has unreachable part')
 
         print()
         print('-' * self.size.x * 2)
@@ -330,14 +333,21 @@ def load_table(filename: str) -> Table:
                 elif c != 'o':
                     continue
                 x += 1
-            width = max(width, x)
-            y += 1
+            if x != 0:
+                width = max(width, x)
+                y += 1
     return SimpleTable(Point(width, y), mines)
 
 
 def get_file_solver(args: 'Any') -> Solver:
     table = load_table(args.file)
-    return Solver(table, interactive=False)
+    solver = Solver(table, interactive=False)
+    if args.startx is None and args.starty is None:
+        with open(args.file) as f:
+            poss = f.readline().split(' ')
+            args.startx = int(poss[0])
+            args.starty = int(poss[1])
+    return solver
 
 
 def get_interactive_solver(args: 'Any') -> Solver:
@@ -348,8 +358,8 @@ def get_interactive_solver(args: 'Any') -> Solver:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-x', '--startx', type=int, required=True)
-    parser.add_argument('-y', '--starty', type=int, required=True)
+    parser.add_argument('-x', '--startx', type=int)
+    parser.add_argument('-y', '--starty', type=int)
     subparsers = parser.add_subparsers()
 
     file_parser = subparsers.add_parser('file', aliases=['f'])
@@ -364,4 +374,13 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     solver = args.func(args)
-    solver.solve(Point(args.startx, args.starty))
+
+    if args.startx is None or args.starty is None:
+        raise RuntimeError('Starting position is not given')
+
+    try:
+        solver.solve(Point(args.startx, args.starty))
+    except CannotSolve as e:
+        solver.print()
+        print(e.args[0])
+        sys.exit(2)

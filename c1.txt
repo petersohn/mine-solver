@@ -1,3 +1,4 @@
+0 0
 o o x
 o o o
 o o o
