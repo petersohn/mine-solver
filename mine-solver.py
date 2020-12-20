@@ -190,25 +190,38 @@ class Solver:
         return problematic
 
     def find_possibilities_inner(
-            self, points: List[Point],
-            num: int, result: Set[Point]) -> Iterator[Set[Point]]:
+            self, problematic: List[Point], points: List[Point], num: int,
+            result: List[Point], mines: Set[Point],
+            not_mines: Set[Point]) -> Iterator[List[Point]]:
+        if num > len(points):
+            return
+        if mines and not self.is_consistent(problematic, mines, not_mines):
+            return
         if num == 0:
             yield result
             return
-        if num > len(points):
-            return
+
+        p = points[0]
         remaining = points[1:]
-        yield from self.find_possibilities_inner(remaining, num, result)
-        yield from self.find_possibilities_inner(
-            remaining, num - 1, result | set([points[0]]))
+        if p not in mines:
+            yield from self.find_possibilities_inner(
+                problematic, remaining, num, result,
+                set(mines), set(not_mines))
+
+        if p not in not_mines:
+            yield from self.find_possibilities_inner(
+                problematic, remaining, num - 1, result + [p],
+                mines | set([p]), not_mines)
 
     def find_possibilities(
-            self, points: List[Point], num: int) -> Iterator[Set[Point]]:
-        return self.find_possibilities_inner(points, num, set())
+            self, problematic: List[Point], points: List[Point],
+            num: int) -> Iterator[List[Point]]:
+        return self.find_possibilities_inner(problematic, points, num,
+            [], set(), set())
 
     def is_consistent(
-            self, problematic: List[Point], mines: Set[Point]) -> bool:
-        not_mines: Set[Point] = set()
+            self, problematic: List[Point], mines: Set[Point],
+            not_mines: Set[Point]) -> bool:
         processed: Set[Point] = set()
         minp = Point(
             min(p.x for p in mines),
@@ -263,9 +276,7 @@ class Solver:
         for p in problematic:
             num_mines, unknown = self.neighbors(p)
             resolution = {pp: [False, False] for pp in unknown}
-            for possibility in self.find_possibilities(unknown, num_mines):
-                if not self.is_consistent(problematic, possibility):
-                    continue
+            for possibility in self.find_possibilities(problematic, unknown, num_mines):
                 for pp in unknown:
                     resolution[pp][int(pp in possibility)] = True
             changed = False
