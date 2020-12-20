@@ -4,6 +4,7 @@ import argparse
 import sys
 import traceback
 import time
+import itertools
 
 
 class Point(NamedTuple):
@@ -195,14 +196,14 @@ class Solver:
         return problematic
 
     def find_possibilities_inner(
-            self, problematic: List[Point], points: List[Point], num: int,
-            result: List[Point], mines: Set[Point],
+            self, problematic: List[Point], points: List[Point],
+            num: Optional[int], result: List[Point], mines: Set[Point],
             not_mines: Set[Point]) -> Iterator[List[Point]]:
-        if num > len(points):
+        if num is not None and num > len(points):
             return
         if mines and not self.is_consistent(problematic, mines, not_mines):
             return
-        if num == 0:
+        if (num is not None and num == 0) or not points:
             yield result
             return
 
@@ -220,9 +221,9 @@ class Solver:
 
     def find_possibilities(
             self, problematic: List[Point], points: List[Point],
-            num: int) -> Iterator[List[Point]]:
-        return self.find_possibilities_inner(problematic, points, num,
-            [], set(), set())
+            num: Optional[int]) -> Iterator[List[Point]]:
+        return self.find_possibilities_inner(
+            problematic, points, num, [], set(), set())
 
     def is_consistent(
             self, problematic: List[Point], mines: Set[Point],
@@ -281,7 +282,8 @@ class Solver:
         for p in problematic:
             num_mines, unknown = self.neighbors(p)
             resolution = {pp: [False, False] for pp in unknown}
-            for possibility in self.find_possibilities(problematic, unknown, num_mines):
+            for possibility in self.find_possibilities(
+                    problematic, unknown, num_mines):
                 for pp in unknown:
                     resolution[pp][int(pp in possibility)] = True
             changed = False
@@ -324,7 +326,37 @@ class Solver:
         return [part[0] for part in partitions]
 
     def guess(self, problematic: List[Point]) -> None:
-        raise Exception('NYI')
+        probabilities: Dict[Point, float] = {}
+        blanks: Dict[Point, int] = set()
+        all_neighbors: Set[Point] = set()
+        avg_mines = 0.0
+
+        partitions = self.split_to_partitions(problematic)
+        for partition in partitions:
+            neighbors = set(itertools.chain.from_iterable(
+                self.neighbors(p)[1] for p in partition))
+            all_neighbors |= neighbors
+
+            for p in neighbors:
+                for y in range(p.y - 1, p.y + 2):
+                    for x in range(p.x - 1, p.x + 2):
+                        pp = Point(x, y)
+                        if pp not in neighbors and self.at(pp) == -2:
+                            blanks.setdefault(pp, 0) += 1
+
+            values = {p: 0 for p in neighbors}
+            possibilities = list(self.find_possibilities(
+                partition, list(neighbors), None))
+            for possibility in possibilities:
+                avg_mines += len(possibility) / len(possibilities)
+                for p in possibility:
+                    values[p] += 1
+            for p, value in values.items():
+                probabilities[p] = value / len(probabilities)
+
+        blank_probability = (self.remaining_mines - avg_mines) / sum(
+            self.table[i] == -2 and self.index_to_point(i) in all_neigbors
+            for i in range(len(self.table)))
 
     def solve(self, start: Point) -> None:
         self.size = self.table.get_size()
